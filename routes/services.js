@@ -1,13 +1,31 @@
-# Supabase
-SUPABASE_URL=https://xxxxx.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key   # server-side only, never expose to frontend
+const express = require('express');
+const supabase = require('../config/supabase');
+const { requireAdmin } = require('../middleware/auth');
+const router = express.Router();
 
-# Auth
-JWT_SECRET=change-this-to-a-long-random-string
-ADMIN_EMAIL=admin@afortevisuals.com
-ADMIN_PASSWORD_HASH=   # generate with scripts/hash-password.js, do not store plaintext
+router.get('/', async (req, res) => {
+  const { data, error } = await supabase
+    .from('services').select('*').eq('is_active', true).order('sort_order');
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ services: data });
+});
 
-# App
-PORT=4000
-FRONTEND_ORIGIN=https://your-frontend-domain.com
-WHATSAPP_NUMBER=6281234567890
+router.post('/', requireAdmin, async (req, res) => {
+  const { data, error } = await supabase.from('services').insert([req.body]).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(201).json({ service: data });
+});
+
+router.put('/:id', requireAdmin, async (req, res) => {
+  const { data, error } = await supabase.from('services').update(req.body).eq('id', req.params.id).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ service: data });
+});
+
+router.delete('/:id', requireAdmin, async (req, res) => {
+  const { error } = await supabase.from('services').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+});
+
+module.exports = router;
