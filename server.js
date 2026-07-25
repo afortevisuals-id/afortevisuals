@@ -16,7 +16,6 @@ const app = express();
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || '*' }));
 app.use(express.json());
 
-// Rate limit umum agar API tidak disalahgunakan
 app.use('/api', rateLimit({ windowMs: 60 * 1000, max: 120 }));
 
 app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
@@ -31,7 +30,6 @@ app.use('/api/settings', settingsRoutes);
 
 app.use((req, res) => res.status(404).json({ error: 'Endpoint tidak ditemukan.' }));
 
-// Error handler terakhir
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ error: 'Terjadi kesalahan pada server.' });
