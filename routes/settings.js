@@ -1,41 +1,27 @@
-require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
-const rateLimit = require('express-rate-limit');
+const supabase = require('../config/supabase');
+const { requireAdmin } = require('../middleware/auth');
+const router = express.Router();
 
-const authRoutes = require('./routes/auth');
-const bookingRoutes = require('./routes/bookings');
-const portfolioRoutes = require('./routes/portfolio');
-const pricingRoutes = require('./routes/pricing');
-const servicesRoutes = require('./routes/services');
-const testimonialRoutes = require('./routes/testimonials');
-const settingsRoutes = require('./routes/settings');
-
-const app = express();
-
-app.use(cors({ origin: process.env.FRONTEND_ORIGIN || '*' }));
-app.use(express.json());
-
-// Rate limit umum agar API tidak disalahgunakan
-app.use('/api', rateLimit({ windowMs: 60 * 1000, max: 120 }));
-
-app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
-
-app.use('/api/auth', authRoutes);
-app.use('/api/bookings', bookingRoutes);
-app.use('/api/portfolio', portfolioRoutes);
-app.use('/api/pricing', pricingRoutes);
-app.use('/api/services', servicesRoutes);
-app.use('/api/testimonials', testimonialRoutes);
-app.use('/api/settings', settingsRoutes);
-
-app.use((req, res) => res.status(404).json({ error: 'Endpoint tidak ditemukan.' }));
-
-// Error handler terakhir
-app.use((err, req, res, next) => {
-  console.error(err);
-  res.status(500).json({ error: 'Terjadi kesalahan pada server.' });
+router.get('/', async (req, res) => {
+  const { data, error } = await supabase.from('site_settings').select('*').eq('id', 1).single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ settings: data });
 });
 
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`Aforte Visuals API berjalan di port ${PORT}`));
+router.put('/', requireAdmin, async (req, res) => {
+  const allowedFields = [
+    'business_name','whatsapp_number','contact_email','instagram_handle',
+    'tiktok_handle','studio_address','operating_hours','hero_media_url','active_theme'
+  ];
+  const update = {};
+  allowedFields.forEach(f => { if (req.body[f] !== undefined) update[f] = req.body[f]; });
+  update.updated_at = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from('site_settings').update(update).eq('id', 1).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ settings: data });
+});
+
+module.exports = router;
