@@ -1,39 +1,89 @@
-require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
-const rateLimit = require('express-rate-limit');
+const multer = require('multer');
+const supabase = require('../config/supabase');
+const { requireAdmin } = require('../middleware/auth');
+const router = express.Router();
 
-const authRoutes = require('./routes/auth');
-const bookingRoutes = require('./routes/bookings');
-const portfolioRoutes = require('./routes/portfolio');
-const pricingRoutes = require('./routes/pricing');
-const servicesRoutes = require('./routes/services');
-const testimonialRoutes = require('./routes/testimonials');
-const settingsRoutes = require('./routes/settings');
-
-const app = express();
-
-app.use(cors({ origin: process.env.FRONTEND_ORIGIN || '*' }));
-app.use(express.json());
-
-app.use('/api', rateLimit({ windowMs: 60 * 1000, max: 120 }));
-
-app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
-
-app.use('/api/auth', authRoutes);
-app.use('/api/bookings', bookingRoutes);
-app.use('/api/portfolio', portfolioRoutes);
-app.use('/api/pricing', pricingRoutes);
-app.use('/api/services', servicesRoutes);
-app.use('/api/testimonials', testimonialRoutes);
-app.use('/api/settings', settingsRoutes);
-
-app.use((req, res) => res.status(404).json({ error: 'Endpoint tidak ditemukan.' }));
-
-app.use((err, req, res, next) => {
-  console.error(err);
-  res.status(500).json({ error: 'Terjadi kesalahan pada server.' });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) return cb(new Error('File harus berupa gambar.'));
+    cb(null, true);
+  }
 });
 
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`Aforte Visuals API berjalan di port ${PORT}`));
+router.get('/', async (req, res) => {
+  const { data, error } = await supabase
+    .from('services').select('*').eq('is_active', true).order('sort_order');
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ services: data });
+});
+
+router.post('/', requireAdmin, upload.single('file'), async (req, res) => {
+  try {
+    const { title, description, duration, photo_count } = req.body;
+    if (!title) return res.status(400).json({ error: 'Judul layanan wajib diisi.' });
+
+    let image_url = null;
+    if (req.file) {
+      const fileExt = req.file.originalname.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+      const filePath = `services/${fileName}`;
+      const { error: uploadError } = await supabase.storage
+        .from('aforte-media')
+        .upload(filePath, req.file.buffer, { contentType: req.file.mimetype });
+      if (uploadError) return res.status(500).json({ error: uploadError.message });
+      const { data: publicUrlData } = supabase.storage.from('aforte-media').getPublicUrl(filePath);
+      image_url = publicUrlData.publicUrl;
+    }
+
+    const { data, error } = await supabase
+      .from('services')
+      .insert([{ title, description, duration, photo_count, image_url }])
+      .select()
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+    res.status(201).json({ service: data });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/:id', requireAdmin, upload.single('file'), async (req, res) => {
+  try {
+    const { title, description, duration, photo_count } = req.body;
+    const updateData = { title, description, duration, photo_count };
+
+    if (req.file) {
+      const fileExt = req.file.originalname.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+      const filePath = `services/${fileName}`;
+      const { error: uploadError } = await supabase.storage
+        .from('aforte-media')
+        .upload(filePath, req.file.buffer, { contentType: req.file.mimetype });
+      if (uploadError) return res.status(500).json({ error: uploadError.message });
+      const { data: publicUrlData } = supabase.storage.from('aforte-media').getPublicUrl(filePath);
+      updateData.image_url = publicUrlData.publicUrl;
+    }
+
+    const { data, error } = await supabase
+      .from('services')
+      .update(updateData)
+      .eq('id', req.params.id)
+      .select()
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ service: data });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/:id', requireAdmin, async (req, res) => {
+  const { error } = await supabase.from('services').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+});
+
+module.exports = router;
