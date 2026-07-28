@@ -5,6 +5,7 @@ const rateLimit = require('express-rate-limit');
 const authRoutes = require('./routes/auth');
 const bookingRoutes = require('./routes/bookings');
 const portfolioRoutes = require('./routes/portfolio');
+const storiesRoutes = require('./routes/stories');
 const pricingRoutes = require('./routes/pricing');
 const servicesRoutes = require('./routes/services');
 const testimonialRoutes = require('./routes/testimonials');
@@ -17,6 +18,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISO
 app.use('/api/auth', authRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/portfolio', portfolioRoutes);
+app.use('/api/stories', storiesRoutes);
 app.use('/api/pricing', pricingRoutes);
 app.use('/api/services', servicesRoutes);
 app.use('/api/testimonials', testimonialRoutes);
